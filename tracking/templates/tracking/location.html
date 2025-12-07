@@ -1,0 +1,135 @@
+<!-- tracking/templates/tracking/location.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Live Location Tracking</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { font-family: Arial; text-align: center; padding: 20px; background: #f0f0f0; margin: 0; }
+        #map { height: 70vh; width: 100%; margin: 20px 0; border: 3px solid #333; border-radius: 10px; }
+        .info { padding: 12px; background: #fff; border-radius: 8px; margin: 10px; font-size: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .coord-box {
+            background: #222; color: #0f0; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 18px; margin: 15px 10px;
+            letter-spacing: 1px;
+        }
+        .user-list {
+            background: #fff; padding: 15px; border-radius: 8px; margin: 10px; max-height: 200px; overflow-y: auto;
+        }
+        .user-item {
+            padding: 8px; margin: 5px 0; background: #e3f2fd; border-radius: 5px; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Live Location Tracking</h1>
+    <div class="info">Logged in as: <strong style="color: blue;">{{ user.username }}</strong></div>
+
+    <!-- তোমার নিজের লোকেশন -->
+    <div class="coord-box">
+        <strong>আমার লোকেশন:</strong><br>
+        <span id="myLat">Lat: ---</span> | 
+        <span id="myLng">Lng: ---</span>
+    </div>
+
+    <!-- অন্যদের লোকেশন লিস্ট -->
+    <div class="user-list">
+        <strong>অনলাইন ইউজারদের লোকেশন:</strong>
+        <div id="userLocations"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([23.6850, 90.3563], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        let myMarker = null;
+        const markers = {};
+        const userData = {};  // লোকেশন স্টোর করার জন্য
+
+        // WebSocket
+        const ws = new WebSocket('ws://' + window.location.host + '/ws/location/');
+        const currentUser = "{{ user.username|escapejs }}";
+
+        ws.onopen = () => console.log("WebSocket Connected");
+
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            const lat = parseFloat(data.latitude).toFixed(6);
+            const lng = parseFloat(data.longitude).toFixed(6);
+            const user = data.user || "Someone";
+
+            // অন্যদের লোকেশন আপডেট করো
+            userData[user] = { lat, lng };
+
+            // মার্কার আপডেট
+            if (markers[user]) {
+                markers[user].setLatLng([lat, lng]);
+            } else {
+                const marker = L.marker([lat, lng]).addTo(map);
+                marker.bindPopup(`<b>${user}</b><br>Lat: ${lat}<br>Lng: ${lng}`).openPopup();
+                markers[user] = marker;
+            }
+
+            // লিস্ট আপডেট করো
+            updateUserList();
+        };
+
+        // নিজের লোকেশন ট্র্যাক করো
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition((position) => {
+                const lat = position.coords.latitude.toFixed(6);
+                const lng = position.coords.longitude.toFixed(6);
+
+                // নিজের UI আপডেট
+                document.getElementById('myLat').textContent = `Lat: ${lat}`;
+                document.getElementById('myLng').textContent = `Lng: ${lng}`;
+
+                // WebSocket এ পাঠাও
+                ws.send(JSON.stringify({
+                    latitude: lat,
+                    longitude: lng,
+                    user: currentUser
+                }));
+
+                // নিজের মার্কার
+                if (!myMarker) {
+                    myMarker = L.circleMarker([lat, lng], {
+                        color: 'red', fillColor: 'red', radius: 10
+                    }).addTo(map).bindPopup(`<b>আমি: ${currentUser}</b><br>Lat: ${lat}<br>Lng: ${lng}`).openPopup();
+                } else {
+                    myMarker.setLatLng([lat, lng]);
+                }
+
+                map.setView([lat, lng], 15);
+
+            }, () => {
+                alert("Location access denied!");
+            }, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 5000
+            });
+        }
+
+        // অনলাইন ইউজারদের লিস্ট দেখাও
+        function updateUserList() {
+            const container = document.getElementById('userLocations');
+            container.innerHTML = '';
+            for (const [user, coords] of Object.entries(userData)) {
+                const div = document.createElement('div');
+                div.className = 'user-item';
+                div.innerHTML = `
+                    <strong>${user === currentUser ? 'আমি' : user}</strong><br>
+                    Lat: ${coords.lat} | Lng: ${coords.lng}
+                `;
+                container.appendChild(div);
+            }
+        }
+    </script>
+</body>
+</html>

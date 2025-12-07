@@ -1,0 +1,21 @@
+geo_project/
+│
+├── geo_project/
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+│
+├── tracking/
+│   ├── migrations/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── templates/
+│       └── tracking/
+│           └── location.html
+│
+├── static/
+├── db.sqlite3
+├── manage.py
